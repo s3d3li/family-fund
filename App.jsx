@@ -31,7 +31,7 @@ async function uploadReceipt(file) {
   try {
     const ext = file.name.split('.').pop();
     const fileName = `receipt_${Date.now()}.${ext}`;
-    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/الإرسالات/${fileName}`, {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/receipts/${fileName}`, {
       method: "POST",
       headers: {
         "apikey": SUPABASE_KEY,
@@ -42,7 +42,7 @@ async function uploadReceipt(file) {
       body: file,
     });
     if (!res.ok) return null;
-    return `${SUPABASE_URL}/storage/v1/object/public/الإرسالات/${fileName}`;
+    return `${SUPABASE_URL}/storage/v1/object/public/receipts/${fileName}`;
   } catch { return null; }
 }
 
