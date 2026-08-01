@@ -102,6 +102,7 @@ export default function App() {
   const [bulkYear, setBulkYear] = useState(2026);
   const [bulkSelected, setBulkSelected] = useState([]);
   const [bulkAmount, setBulkAmount] = useState(200);
+  const [selectedMonthKey, setSelectedMonthKey] = useState(null);
 
   // Initial load
   useEffect(() => {
@@ -479,38 +480,37 @@ export default function App() {
             {getPaymentSchedule().length===0
               ? <div style={{ textAlign:"center", color:"#94A3B8", padding:40 }}>لا توجد بيانات بعد</div>
               : getPaymentSchedule().map(s => {
+                const key = `${s.year}-${s.month}`;
                 const mp = data.payments.filter(p => p.month===s.month && p.year===s.year);
                 const me = data.expenses.filter(e => e.date.startsWith(`${s.year}-${String(s.month).padStart(2,'0')}`));
                 const mi = mp.reduce((sum,p) => sum+p.amount, 0);
                 const mx = me.reduce((sum,e) => sum+e.amount, 0);
+                const paidIds = mp.map(p => p.memberId);
+                const unpaidCount = activeMembers.filter(m => !paidIds.includes(m.id)).length;
                 return (
-                  <div key={`${s.year}-${s.month}`} style={{ background:"#fff", borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.06)" }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                  <div key={key} onClick={() => setSelectedMonthKey(key)}
+                    style={{ background:"#fff", borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.06)", cursor:"pointer" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
                       <div style={{ fontWeight:700, fontSize:16 }}>{getMonthLabel(s.month,s.year)}</div>
-                      <div style={{ color:(mi-mx)>=0?"#10B981":"#EF4444", fontWeight:700 }}>{(mi-mx).toLocaleString()} ر.س</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ fontSize:12, color:"#94A3B8" }}>تفاصيل ←</span>
+                        <div style={{ color:(mi-mx)>=0?"#10B981":"#EF4444", fontWeight:700 }}>{(mi-mx).toLocaleString()} ر.س</div>
+                      </div>
                     </div>
-                    <div style={{ display:"flex", gap:10, marginBottom:10 }}>
+                    <div style={{ display:"flex", gap:10 }}>
                       <div style={{ flex:1, background:"#F0FFF4", borderRadius:10, padding:10, textAlign:"center" }}>
                         <div style={{ color:"#10B981", fontWeight:700 }}>{mi.toLocaleString()}</div>
-                        <div style={{ color:"#94A3B8", fontSize:11 }}>تحصيل ({s.count})</div>
+                        <div style={{ color:"#94A3B8", fontSize:11 }}>تحصيل ({mp.length})</div>
                       </div>
                       <div style={{ flex:1, background:"#FFF1F2", borderRadius:10, padding:10, textAlign:"center" }}>
                         <div style={{ color:"#EF4444", fontWeight:700 }}>{mx.toLocaleString()}</div>
                         <div style={{ color:"#94A3B8", fontSize:11 }}>صرف ({me.length})</div>
                       </div>
+                      <div style={{ flex:1, background:"#FEF3C7", borderRadius:10, padding:10, textAlign:"center" }}>
+                        <div style={{ color:"#F59E0B", fontWeight:700 }}>{unpaidCount}</div>
+                        <div style={{ color:"#94A3B8", fontSize:11 }}>لم يسددوا</div>
+                      </div>
                     </div>
-                    {mp.map(p => (
-                      <div key={p.id} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:"1px solid #F1F5F9", fontSize:13 }}>
-                        <span>{p.memberName}</span>
-                        <span style={{ color:"#10B981", fontWeight:600 }}>+{p.amount.toLocaleString()}</span>
-                      </div>
-                    ))}
-                    {me.map(e => (
-                      <div key={e.id} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:"1px solid #F1F5F9", fontSize:13 }}>
-                        <span style={{ color:"#64748B" }}>{e.title}</span>
-                        <span style={{ color:"#EF4444", fontWeight:600 }}>-{e.amount.toLocaleString()}</span>
-                      </div>
-                    ))}
                   </div>
                 );
               })
@@ -518,6 +518,103 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* Month Detail Modal */}
+      {selectedMonthKey && (() => {
+        const [yr, mn] = selectedMonthKey.split('-').map(Number);
+        const mp = data.payments.filter(p => p.month===mn && p.year===yr);
+        const me = data.expenses.filter(e => e.date.startsWith(`${yr}-${String(mn).padStart(2,'0')}`));
+        const mi = mp.reduce((sum,p) => sum+p.amount, 0);
+        const mx = me.reduce((sum,e) => sum+e.amount, 0);
+        const paidIds = mp.map(p => p.memberId);
+        const unpaid = activeMembers.filter(m => !paidIds.includes(m.id));
+        return (
+          <div onClick={() => setSelectedMonthKey(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:300, display:"flex", alignItems:"flex-end" }}>
+            <div onClick={e => e.stopPropagation()} style={{ background:"#F0F4FF", borderRadius:"24px 24px 0 0", width:"100%", maxHeight:"90vh", overflowY:"auto" }}>
+              {/* Header */}
+              <div style={{ background:"linear-gradient(135deg,#4F46E5,#7C3AED)", padding:"20px 20px 16px", borderRadius:"24px 24px 0 0" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <button onClick={() => setSelectedMonthKey(null)} style={{ background:"rgba(255,255,255,0.2)", border:"none", color:"#fff", borderRadius:20, padding:"4px 12px", cursor:"pointer" }}>✕</button>
+                  <div style={{ color:"#fff", fontWeight:700, fontSize:18 }}>{getMonthLabel(mn,yr)}</div>
+                </div>
+                <div style={{ display:"flex", gap:12, marginTop:14 }}>
+                  <div style={{ flex:1, textAlign:"center" }}>
+                    <div style={{ color:"#10B981", fontWeight:700, fontSize:18 }}>{mi.toLocaleString()}</div>
+                    <div style={{ color:"#C4B5FD", fontSize:11 }}>تحصيل</div>
+                  </div>
+                  <div style={{ flex:1, textAlign:"center" }}>
+                    <div style={{ color:"#EF4444", fontWeight:700, fontSize:18 }}>{mx.toLocaleString()}</div>
+                    <div style={{ color:"#C4B5FD", fontSize:11 }}>صرف</div>
+                  </div>
+                  <div style={{ flex:1, textAlign:"center" }}>
+                    <div style={{ color:(mi-mx)>=0?"#34D399":"#EF4444", fontWeight:700, fontSize:18 }}>{(mi-mx).toLocaleString()}</div>
+                    <div style={{ color:"#C4B5FD", fontSize:11 }}>الرصيد</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ padding:16 }}>
+                {/* من سدّد */}
+                <div style={{ fontWeight:700, fontSize:15, marginBottom:8, color:"#10B981" }}>✅ سدّدوا ({mp.length})</div>
+                {mp.length===0
+                  ? <div style={{ color:"#94A3B8", fontSize:13, marginBottom:12 }}>لا أحد</div>
+                  : mp.map(p => (
+                    <div key={p.id} style={{ background:"#fff", borderRadius:12, padding:"10px 14px", marginBottom:6, display:"flex", justifyContent:"space-between" }}>
+                      <span style={{ fontSize:14 }}>{p.memberName}</span>
+                      <span style={{ color:"#10B981", fontWeight:700 }}>+{p.amount.toLocaleString()}</span>
+                    </div>
+                  ))
+                }
+
+                {/* من لم يسدد */}
+                {unpaid.length > 0 && (
+                  <>
+                    <div style={{ fontWeight:700, fontSize:15, margin:"12px 0 8px", color:"#EF4444" }}>⏳ لم يسددوا ({unpaid.length})</div>
+                    {unpaid.map(m => (
+                      <div key={m.id} style={{ background:"#FEF2F2", borderRadius:12, padding:"10px 14px", marginBottom:6, display:"flex", justifyContent:"space-between" }}>
+                        <span style={{ fontSize:14 }}>{m.name}</span>
+                        <span style={{ color:"#EF4444", fontWeight:700 }}>{m.monthlyAmount} ر.س</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {/* المصروفات */}
+                {me.length > 0 && (
+                  <>
+                    <div style={{ fontWeight:700, fontSize:15, margin:"12px 0 8px", color:"#EF4444" }}>📤 المصروفات ({me.length})</div>
+                    {me.map(e => (
+                      <div key={e.id} style={{ background:"#fff", borderRadius:12, padding:"12px 14px", marginBottom:8 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                          <div>
+                            <span style={{ background:"#6C63FF", color:"#fff", fontSize:11, padding:"2px 8px", borderRadius:20, marginLeft:6 }}>{e.category}</span>
+                            <span style={{ fontWeight:700, fontSize:14 }}>{e.title}</span>
+                          </div>
+                          <span style={{ color:"#EF4444", fontWeight:700 }}>-{e.amount.toLocaleString()}</span>
+                        </div>
+                        {e.note && <div style={{ color:"#64748B", fontSize:12, marginTop:4 }}>{e.note}</div>}
+                        {e.receiptUrl && (
+                          <div style={{ marginTop:8 }}>
+                            <img
+                              src={e.receiptUrl}
+                              alt="فاتورة"
+                              style={{ width:"100%", maxHeight:220, objectFit:"cover", borderRadius:10, border:"1.5px solid #E2E8F0" }}
+                              onError={ev => { ev.target.style.display='none'; }}
+                            />
+                            <a href={e.receiptUrl} target="_blank" rel="noreferrer" style={{ display:"block", textAlign:"center", color:"#4F46E5", fontSize:12, marginTop:4 }}>
+                              عرض الصورة كاملة ↗
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Bottom Nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", display:"flex", boxShadow:"0 -4px 20px rgba(0,0,0,0.08)", padding:"8px 0 12px", zIndex:100 }}>
