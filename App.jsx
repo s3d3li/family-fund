@@ -237,7 +237,15 @@ export default function App() {
   function toggleMember(id) { if (!isAdmin) return; setData(d => ({ ...d, members:d.members.map(m => m.id===id ? {...m,active:!m.active} : m) })); }
   function startEditMember(m) { if (!isAdmin) return; setEditingMemberId(m.id); setEditName(m.name); setEditAmount(m.monthlyAmount); }
   function saveMemberEdit(id) { if (!isAdmin) return; setData(d => ({ ...d, members:d.members.map(m => m.id===id ? {...m,name:editName||m.name,monthlyAmount:parseFloat(editAmount)||m.monthlyAmount} : m) })); setEditingMemberId(null); }
-  function deletePayment(id) { if (!isAdmin) return; setData(d => ({ ...d, payments:d.payments.filter(p=>p.id!==id) })); }
+  function exportBackup() {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `صندوق-العائلة-نسخة-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}function deletePayment(id) { if (!isAdmin) return; setData(d => ({ ...d, payments:d.payments.filter(p=>p.id!==id) })); }
   function deleteExpense(id) { if (!isAdmin) return; setData(d => ({ ...d, expenses:d.expenses.filter(e=>e.id!==id) })); }
 
   function getPaymentSchedule() {
@@ -282,6 +290,7 @@ export default function App() {
             <div style={{ color:"#C4B5FD", fontSize:11, display:"flex", alignItems:"center", gap:4 }}>
               <span style={{ width:7, height:7, borderRadius:"50%", background:syncing?"#FBBF24":"#34D399", display:"inline-block" }}></span>
               {syncing?"حفظ...":"متزامن"}
+              <button onClick={exportBackup} style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", fontSize: 11, marginRight: 8, cursor: "pointer" }}>⬇️ نسخة</button>
             </div>
             <button onClick={manualRefresh} style={{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"none", borderRadius:20, padding:"5px 8px", fontSize:14, cursor:"pointer" }}>🔄</button>
             {isAdmin
