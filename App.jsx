@@ -11,6 +11,15 @@ const HEADERS = {
 async function loadData() {
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/fund_data?id=eq.main&select=data`, { headers: HEADERS });
+    if (!res.ok) return { error: true };
+    const rows = await res.json();
+    return { error: false, data: rows.length > 0 ? rows[0].data : null };
+  } catch {
+    return { error: true };
+  }
+} {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/fund_data?id=eq.main&select=data`, { headers: HEADERS });
     if (!res.ok) return null;
     const rows = await res.json();
     return rows.length > 0 ? rows[0].data : null;
@@ -105,7 +114,28 @@ export default function App() {
   const [selectedMonthKey, setSelectedMonthKey] = useState(null);
 
   // Initial load
-  useEffect(() => {
+   useEffect(() => {
+    let cancelled = false;
+    loadData().then(async result => {
+      if (cancelled) return;
+      if (result.error) {
+        // فشل الاتصال — لا تكتب فوق البيانات، حاول مرة ثانية بعد شوي
+        setTimeout(() => { if (!cancelled) window.location.reload(); }, 3000);
+        return;
+      }
+      if (result.data) {
+        lastSavedRef.current = JSON.stringify(result.data);
+        setData(result.data);
+      } else {
+        lastSavedRef.current = JSON.stringify(initialData);
+        await saveData(initialData);
+        setData(initialData);
+      }
+      setLoading(false);
+      isFirstLoad.current = false;
+    });
+    return () => { cancelled = true; };
+  }, []);(() => {
     let cancelled = false;
     loadData().then(async existing => {
       if (cancelled) return;
@@ -148,7 +178,13 @@ export default function App() {
     saveData(data).then(() => setSyncing(false));
   }, [data]);
 
-  function manualRefresh() {
+   function manualRefresh() {
+    setSyncing(true);
+    loadData().then(result => {
+      if (!result.error && result.data) { lastSavedRef.current = JSON.stringify(result.data); setData(result.data); }
+      setHasUpdate(false); setSyncing(false);
+    });
+  }() {
     setSyncing(true);
     loadData().then(fresh => {
       if (fresh) { lastSavedRef.current = JSON.stringify(fresh); setData(fresh); }
