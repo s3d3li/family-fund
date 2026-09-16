@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
-const SUPABASE_URL = "https://pbeohkvzqutqxnrsohjg.supabase.co";
-const SUPABASE_KEY = "sb_publishable_kEo9ZxNCrLnOVrJzEKU20g_SXIXr8IF";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 const HEADERS = {
   "Content-Type": "application/json",
   "apikey": SUPABASE_KEY,
