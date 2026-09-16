@@ -17,13 +17,6 @@ async function loadData() {
   } catch {
     return { error: true };
   }
-} {
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/fund_data?id=eq.main&select=data`, { headers: HEADERS });
-    if (!res.ok) return null;
-    const rows = await res.json();
-    return rows.length > 0 ? rows[0].data : null;
-  } catch { return null; }
 }
 
 async function saveData(data) {
@@ -182,12 +175,6 @@ export default function App() {
     setSyncing(true);
     loadData().then(result => {
       if (!result.error && result.data) { lastSavedRef.current = JSON.stringify(result.data); setData(result.data); }
-      setHasUpdate(false); setSyncing(false);
-    });
-  }() {
-    setSyncing(true);
-    loadData().then(fresh => {
-      if (fresh) { lastSavedRef.current = JSON.stringify(fresh); setData(fresh); }
       setHasUpdate(false); setSyncing(false);
     });
   }
