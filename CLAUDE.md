@@ -49,3 +49,29 @@
 ## طريقة العمل
 في كل خطوة:
 PLAN -> BACKUP CHECK -> CHANGE -> TEST -> DIFF -> APPROVAL -> COMMIT
+
+## الحالة الأمنية بعد المرحلة 3
+- Supabase Auth مستخدم لتسجيل دخول المشرفين عبر Email + Password.
+- التطبيق متاح للعامة للعرض بدون تسجيل دخول.
+- public.admin_users موجود ويرتبط بـ auth.users.id.
+- يوجد حاليًا حساب مشرف واحد معتمد، والنظام يدعم إضافة عدة مشرفين لاحقًا.
+- RLS مفعّل على fund_data.
+- القراءة العامة من fund_data مسموحة.
+- INSERT / UPDATE / DELETE على fund_data للمشرفين المعتمدين فقط.
+- سياسة public write القديمة تم حذفها.
+- اختبار anon للكتابة أعاد 0 rows.
+- اختبار المشرف للكتابة نجح داخل transaction مع rollback بدون تغيير البيانات.
+- bucket receipts بقي public للقراءة.
+- SELECT على receipts متاح للعامة.
+- INSERT / UPDATE / DELETE على receipts للمشرفين المعتمدين فقط.
+- سياسة receipts insert العامة القديمة تم حذفها.
+- ADMIN_PIN وsessionStorage الخاص بالـPIN أزيلا بالكامل.
+- عمليات الكتابة في التطبيق تتطلب accessToken لجلسة المشرف.
+- العرض العام ودخول وخروج المشرف اختُبرا يدويًا ونجحا.
+- مشكلة Polling والشاشة البيضاء تم إصلاحها.
+- npm run build ناجح.
+- بيانات fund_data وبنية members/payments/expenses لم تتغير.
+- النسخة الاحتياطية الأصلية للبيانات قبل النقل كانت:
+  members: 38
+  payments: 65
+  expenses: 2
