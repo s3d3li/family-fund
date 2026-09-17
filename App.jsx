@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
@@ -7,6 +8,7 @@ const HEADERS = {
   "apikey": SUPABASE_KEY,
   "Authorization": `Bearer ${SUPABASE_KEY}`,
 };
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 async function loadData() {
   try {
@@ -19,17 +21,23 @@ async function loadData() {
   }
 }
 
-async function saveData(data) {
+async function saveData(data, accessToken) {
+  if (!accessToken) return { error: true };
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/fund_data`, {
       method: "POST",
-      headers: { ...HEADERS, "Prefer": "resolution=merge-duplicates,return=representation" },
+      headers: {
+        ...HEADERS,
+        "Authorization": `Bearer ${accessToken}`,
+        "Prefer": "resolution=merge-duplicates,return=representation",
+      },
       body: JSON.stringify({ id: "main", data, updated_at: new Date().toISOString() }),
     });
   } catch {}
 }
 
-async function uploadReceipt(file) {
+async function uploadReceipt(file, accessToken) {
+  if (!accessToken) return null;
   try {
     const ext = file.name.split('.').pop();
     const fileName = `receipt_${Date.now()}.${ext}`;
@@ -37,7 +45,7 @@ async function uploadReceipt(file) {
       method: "POST",
       headers: {
         "apikey": SUPABASE_KEY,
-        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Authorization": `Bearer ${accessToken}`,
         "Content-Type": file.type,
         "x-upsert": "true",
       },
@@ -77,7 +85,6 @@ const inputStyle = { width:"100%", padding:"12px 14px", borderRadius:12, border:
 const btnPrimary = { width:"100%", background:"linear-gradient(135deg,#4F46E5,#7C3AED)", color:"#fff", border:"none", borderRadius:14, padding:"14px 0", fontWeight:700, fontSize:16, cursor:"pointer" };
 
 export default function App() {
-  const ADMIN_PIN = "1234321";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -87,9 +94,13 @@ export default function App() {
   const lastSavedRef = useRef(null);
   const isFirstLoad = useRef(true);
 
-  const [isAdmin, setIsAdmin] = useState(() => { try { return sessionStorage.getItem("fund-admin") === "true"; } catch { return false; } });
-  const [pinInput, setPinInput] = useState("");
-  const [pinError, setPinError] = useState(false);
+  const [session, setSession] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const sessionRef = useRef(null);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
 
   const [payForm, setPayForm] = useState({ memberId:"", month:new Date().getMonth()+1, year:2026, amount:"", note:"" });
   const [expForm, setExpForm] = useState({ title:"", amount:"", date:new Date().toISOString().slice(0,10), category:"عام", note:"" });
@@ -106,6 +117,45 @@ export default function App() {
   const [bulkAmount, setBulkAmount] = useState(200);
   const [selectedMonthKey, setSelectedMonthKey] = useState(null);
 
+  // Admin auth session (Supabase Auth) + admin_users check
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      sessionRef.current = session;
+      setSession(session);
+    });
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      sessionRef.current = session;
+      setSession(session);
+    });
+    return () => authListener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session) { setIsAdmin(false); return; }
+    let cancelled = false;
+    supabase.from("admin_users").select("id").eq("id", session.user.id).maybeSingle()
+      .then(({ data: adminRow }) => {
+        if (cancelled) return;
+        if (adminRow) {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+          supabase.auth.signOut();
+        }
+      });
+    return () => { cancelled = true; };
+  }, [session]);
+
+  async function handleLogin() {
+    setLoggingIn(true);
+    setLoginError(false);
+    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password: loginPassword });
+    setLoggingIn(false);
+    if (error) { setLoginError(true); return; }
+    setModal(null); setLoginEmail(""); setLoginPassword("");
+  }
+  function handleLogout() { supabase.auth.signOut(); }
+
   // Initial load
    useEffect(() => {
     let cancelled = false;
@@ -121,7 +171,7 @@ export default function App() {
         setData(result.data);
       } else {
         lastSavedRef.current = JSON.stringify(initialData);
-        await saveData(initialData);
+        await saveData(initialData, sessionRef.current?.access_token);
         setData(initialData);
       }
       setLoading(false);
@@ -150,10 +200,10 @@ export default function App() {
   useEffect(() => {
     if (loading) return;
     const interval = setInterval(async () => {
-      const fresh = await loadData();
-      if (fresh && JSON.stringify(fresh) !== lastSavedRef.current) {
-        lastSavedRef.current = JSON.stringify(fresh);
-        setData(fresh);
+      const result = await loadData();
+      if (!result.error && result.data && JSON.stringify(result.data) !== lastSavedRef.current) {
+        lastSavedRef.current = JSON.stringify(result.data);
+        setData(result.data);
         setHasUpdate(true);
         setTimeout(() => setHasUpdate(false), 4000);
       }
@@ -168,7 +218,7 @@ export default function App() {
     if (json === lastSavedRef.current) return;
     lastSavedRef.current = json;
     setSyncing(true);
-    saveData(data).then(() => setSyncing(false));
+    saveData(data, sessionRef.current?.access_token).then(() => setSyncing(false));
   }, [data]);
 
    function manualRefresh() {
@@ -178,14 +228,6 @@ export default function App() {
       setHasUpdate(false); setSyncing(false);
     });
   }
-
-  function tryUnlock() {
-    if (pinInput === ADMIN_PIN) {
-      setIsAdmin(true); try { sessionStorage.setItem("fund-admin","true"); } catch {}
-      setModal(null); setPinInput(""); setPinError(false);
-    } else { setPinError(true); }
-  }
-  function lockAdmin() { setIsAdmin(false); try { sessionStorage.removeItem("fund-admin"); } catch {} }
 
   if (loading || !data) return (
     <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"#F0F4FF", fontFamily:"'Segoe UI',Tahoma,sans-serif", direction:"rtl" }}>
@@ -220,7 +262,7 @@ export default function App() {
     setUploadingReceipt(true);
     let receiptUrl = null;
     if (receiptFile) {
-      receiptUrl = await uploadReceipt(receiptFile);
+      receiptUrl = await uploadReceipt(receiptFile, sessionRef.current?.access_token);
     }
     setUploadingReceipt(false);
     const newExp = { id:data.nextExpenseId, title:expForm.title, amount:parseFloat(expForm.amount), date:expForm.date, category:expForm.category, note:expForm.note, receiptUrl };
@@ -317,8 +359,8 @@ export default function App() {
             </div>
             <button onClick={manualRefresh} style={{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"none", borderRadius:20, padding:"5px 8px", fontSize:14, cursor:"pointer" }}>🔄</button>
             {isAdmin
-              ? <button onClick={lockAdmin} style={{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"none", borderRadius:20, padding:"5px 10px", fontSize:11, fontWeight:600, cursor:"pointer" }}>🔓 مسؤول</button>
-              : <button onClick={() => setModal("pin")} style={{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"none", borderRadius:20, padding:"5px 10px", fontSize:11, fontWeight:600, cursor:"pointer" }}>🔒 دخول</button>
+              ? <button onClick={handleLogout} style={{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"none", borderRadius:20, padding:"5px 10px", fontSize:11, fontWeight:600, cursor:"pointer" }}>🔓 مسؤول</button>
+              : <button onClick={() => setModal("login")} style={{ background:"rgba(255,255,255,0.15)", color:"#fff", border:"none", borderRadius:20, padding:"5px 10px", fontSize:11, fontWeight:600, cursor:"pointer" }}>🔒 دخول</button>
             }
           </div>
         </div>
@@ -664,14 +706,15 @@ export default function App() {
         <div onClick={() => setModal(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-end" }}>
           <div onClick={e => e.stopPropagation()} style={{ background:"#fff", borderRadius:"24px 24px 0 0", padding:24, width:"100%", maxHeight:"85vh", overflowY:"auto" }}>
 
-            {/* PIN */}
-            {modal==="pin" && (
+            {/* Admin Login */}
+            {modal==="login" && (
               <div>
                 <div style={{ fontWeight:700, fontSize:18, marginBottom:6 }}>🔒 دخول المسؤول</div>
-                <div style={{ color:"#94A3B8", fontSize:13, marginBottom:20 }}>أدخل الرمز السري للتحكم بالصندوق</div>
-                <input type="password" value={pinInput} onChange={e => { setPinInput(e.target.value); setPinError(false); }} onKeyDown={e => e.key==="Enter" && tryUnlock()} style={{ ...inputStyle, textAlign:"center", letterSpacing:4, fontSize:20, marginBottom:pinError?6:20 }} placeholder="••••" autoFocus />
-                {pinError && <div style={{ color:"#EF4444", fontSize:13, marginBottom:14 }}>الرمز غير صحيح</div>}
-                <button onClick={tryUnlock} style={btnPrimary}>دخول</button>
+                <div style={{ color:"#94A3B8", fontSize:13, marginBottom:20 }}>سجّل الدخول بحساب المشرف للتحكم بالصندوق</div>
+                <input type="email" value={loginEmail} onChange={e => { setLoginEmail(e.target.value); setLoginError(false); }} style={{ ...inputStyle, marginBottom:10 }} placeholder="البريد الإلكتروني" autoFocus />
+                <input type="password" value={loginPassword} onChange={e => { setLoginPassword(e.target.value); setLoginError(false); }} onKeyDown={e => e.key==="Enter" && handleLogin()} style={{ ...inputStyle, marginBottom:loginError?6:20 }} placeholder="كلمة المرور" />
+                {loginError && <div style={{ color:"#EF4444", fontSize:13, marginBottom:14 }}>البريد أو كلمة المرور غير صحيحة</div>}
+                <button onClick={handleLogin} disabled={loggingIn} style={{ ...btnPrimary, opacity:loggingIn?0.7:1 }}>{loggingIn ? "جاري الدخول..." : "دخول"}</button>
               </div>
             )}
 
